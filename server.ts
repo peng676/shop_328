@@ -6,7 +6,9 @@ import dotenv from "dotenv";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import { initDatabase, insertProducts, createOrder, verifyOrder, markOrderAsUsed } from "./src/lib/db";
+import pool from "./src/lib/db";
 import { products } from "./src/constants";
+import adminRouter from "./admin-api";
 
 dotenv.config();
 
@@ -24,20 +26,24 @@ async function startServer() {
 
   const corsOptions = {
     origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
-    methods: ['GET', 'POST'],
-    allowedHeaders: ['Content-Type']
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
   };
   app.use(cors(corsOptions));
 
-  const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    message: { error: '请求过于频繁，请稍后再试' },
-    standardHeaders: true,
-    legacyHeaders: false,
-  });
+  // 后台管理 API 路由
+  app.use('/admin-api', adminRouter);
 
-  app.use('/api/', apiLimiter);
+  // 暂时禁用 rate limit 以便测试
+  // const apiLimiter = rateLimit({
+  //   windowMs: 15 * 60 * 1000,
+  //   max: 10,
+  //   message: { error: '请求过于频繁，请稍后再试' },
+  //   standardHeaders: true,
+  //   legacyHeaders: false,
+  // });
+
+  // app.use('/api/', apiLimiter);
 
   function generateDownloadLink(productId: string): string {
     const randomToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -172,6 +178,34 @@ async function startServer() {
       success: true,
       downloadLink: result.order.download_link
     });
+  });
+
+  // 公共产品 API 端点
+  app.get("/api/products", async (req, res) => {
+    try {
+      const [rows] = await pool.execute('SELECT * FROM products ORDER BY CAST(id AS UNSIGNED) ASC');
+      // 转换数据格式以匹配前端需要的结构
+      const products = (rows as any[]).map(product => ({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        description: {
+          zh: product.description_zh,
+          en: product.description_en
+        },
+        price: product.price,
+        icon: product.icon,
+        rating: product.rating,
+        popular: product.popular === 1
+      }));
+      res.json({
+        success: true,
+        data: products
+      });
+    } catch (error) {
+      console.error('获取产品列表错误:', error);
+      res.status(500).json({ error: '服务器错误' });
+    }
   });
 
   if (process.env.NODE_ENV !== "production") {

@@ -86,6 +86,18 @@ async function createTables() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS admin_users (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        role ENUM('admin', 'editor') DEFAULT 'editor',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     console.log('Tables created successfully');
   } finally {
     connection.release();
@@ -241,6 +253,42 @@ export async function insertProducts(products: any[]) {
       );
     }
     console.log('Products inserted successfully');
+  } finally {
+    connection.release();
+  }
+}
+
+export async function createAdminUser(username: string, password: string, name: string, role: string = 'editor') {
+  const connection = await pool.getConnection();
+  try {
+    const [result] = await connection.execute(
+      'INSERT INTO admin_users (username, password, name, role) VALUES (?, ?, ?, ?)',
+      [username, password, name, role]
+    );
+    return result;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function getAdminUserByUsername(username: string) {
+  const connection = await pool.getConnection();
+  try {
+    const [rows] = await connection.execute(
+      'SELECT * FROM admin_users WHERE username = ?',
+      [username]
+    );
+    return (rows as any[])[0];
+  } finally {
+    connection.release();
+  }
+}
+
+export async function getAdminUsers() {
+  const connection = await pool.getConnection();
+  try {
+    const [rows] = await connection.execute('SELECT * FROM admin_users ORDER BY created_at DESC');
+    return rows;
   } finally {
     connection.release();
   }
